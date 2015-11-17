@@ -2,7 +2,7 @@ function NetworkManager() {
     throw new Error('This is a static class');
 }
 
-NetworkManager.serverUrl = 'ws://nekomimigame.com:10093/';
+NetworkManager.serverUrl = 'ws://localhost:7681/' //'ws://nekomimigame.com:10093/';
 NetworkManager.websocket = null;
 NetworkManager.state = 0;//0:normal 1:connecting 2:connected
 NetworkManager.waitCount = 0;
@@ -17,12 +17,15 @@ NetworkManager.connect = function() {
         NetworkManager.state = 2;
         console.log("Connected to WebSocket server.");
         //NetworkManager.sendMsg('start');
+        InfoBox.addInfo('与联机服务器连接成功');
         }; 
         
     this.websocket.onclose = function (evt) {
         NetworkManager.state = 0;
         console.log("Disconnected"); 
+        
         NetworkManager.websocket = null;
+        InfoBox.addInfo('与联机服务器断开连接');
         }; 
     this.websocket.onmessage = function (evt) {
         console.log('Retrieved data from server: ' + evt.data);
@@ -33,6 +36,9 @@ NetworkManager.connect = function() {
         if(NetworkManager.state == 2){
             NetworkManager.disconnect();
         }
+
+        
+        InfoBox.addInfo('无法与联机服务器连接');
  
     }; 
 }
@@ -60,11 +66,13 @@ NetworkManager.sendMsg = function (data) {
 NetworkManager.disconnect = function () {
     if(this.websocket){
         console.log("try to disconnect WebSocket server.");
+
         this.state = 0;
         this.websocket.close();
+        delete this.websocket;
     }
      
-     }; 
+ }; 
 
      
      
@@ -174,6 +182,71 @@ Scene_Base.prototype.initialize = function() {
     this._fadeSprite = null;
     this._backSprite = new Sprite(ImageManager.loadSystem('network'));
     this.backState = 0;
+    this._infoBox = new Sprite(new Bitmap());
+    if (InfoBox.sprite == null) {
+        InfoBox.sprite = new Sprite(new Bitmap(Graphics.width ,Graphics.height));
+    }
+    
+};
+
+
+
+function InfoLine(text) {
+    this.startTime = new Date().getTime();
+    this.endTime = this.startTime + 5000;
+   // this.sprite = new Sprite(ImageManager.loadSystem('GameOver'));
+//    this.sprite.anchor.x = 1;
+//    this.sprite.anchor.y = 1;
+    this.text = text;
+};
+
+
+function InfoBox() {
+    throw new Error('This is a static class');
+}
+
+InfoBox.infoLineList =[];
+InfoBox.maxLine = 10;
+InfoBox.sprite = null;
+
+
+
+InfoBox.addInfo = function(text) {
+    this.infoLineList.push(new InfoLine(text));
+    this.startTime = Date.now();
+    this.endTime = this.startTime + 20000;
+    this.needrefresh = true;
+};
+InfoBox.delInfo = function(index) {
+    delete this.infoLineList[index];
+    this.infoLineList.splice(index,1);
+    this.needrefresh = true;
+};
+
+InfoBox.needrefresh = false;
+
+InfoBox.update = function() {
+    var list = this.infoLineList;
+    for (var i = 0; i < list.length; i++) {
+        var info = list[i];
+        var now = Date.now();
+        if (info.endTime < now) {
+            this.delInfo(i);
+        }
+    }
+    if (this.needrefresh) {
+        //var list = this.infoLineList;
+        var text = "";
+        this.sprite.bitmap.clear();
+        this.sprite.bitmap.outlineWidth = 3;
+        this.sprite.bitmap.fontSize = 12;
+        for (var i = 0; i < list.length; i++) {
+            this.sprite.bitmap.drawText(list[i].text, 16, Graphics.height/4 - i*16, Graphics.width , Graphics.height, '');
+            }
+
+  
+        this.needrefresh = false;
+        }
 };
 
 Scene_Base.prototype.update = function() {
@@ -181,7 +254,14 @@ Scene_Base.prototype.update = function() {
     this.updateChildren();
     AudioManager.checkErrors();
     this.checkNetwork();
+    InfoBox.update();
 };
+
+Scene_Base.prototype.showListBox = function() {
+    this._infoBox.addChild(InfoBox.sprite);
+    this.addChild(this._infoBox);
+    console.log(this);
+}
 
 Scene_Base.prototype.checkNetwork = function() {
     if (this.backState != NetworkManager.state) {
@@ -189,7 +269,9 @@ Scene_Base.prototype.checkNetwork = function() {
         if (NetworkManager.state == 2) {
             this._backSprite.visible = true;
             this.addChild(this._backSprite);
-        }else{
+        }else if(NetworkManager.state == 1){
+            this._backSprite.visible = false;
+        }else if(NetworkManager.state == 0){
             this._backSprite.visible = false;
         }
     }

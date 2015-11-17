@@ -288,3 +288,16 @@ Game_Map.prototype.updateMapPlayers = function() {
         player.update();
     });
 };
+
+
+SceneManager.update = function() {
+        this.tickStart();
+        this.updateInputData();
+        this.updateMain();
+        this.tickEnd();
+};
+
+SceneManager.onSceneStart = function() {
+    Graphics.endLoading();
+    this._scene.showListBox();
+};
