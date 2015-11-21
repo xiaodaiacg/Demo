@@ -912,15 +912,16 @@ Sprite_EnemyActor.prototype.updateBitmap = function() {
 };
 
 function Game_OtherActor() {
-    Game_Actor.apply(this, arguments);
+    this.initialize.apply(this, arguments);
 }
-
-
-
 
 Game_OtherActor.prototype = Object.create(Game_Actor.prototype);
 Game_OtherActor.prototype.constructor = Game_OtherActor;
 
+Game_OtherActor.prototype.initialize = function(actorId) {
+    Game_Battler.prototype.initialize.call(this);
+    this.setup(actorId);
+};
 
 Game_OtherActor.prototype.setAIPattern = function() {
     
