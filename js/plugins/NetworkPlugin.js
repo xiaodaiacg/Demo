@@ -912,7 +912,7 @@ Sprite_EnemyActor.prototype.updateBitmap = function() {
 };
 
 function Game_OtherActor() {
-    this.initialize.apply(this, arguments);
+    Game_Actor.apply(this, arguments);
 }
 
 
