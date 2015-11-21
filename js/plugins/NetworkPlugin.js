@@ -545,6 +545,8 @@ BattleManager.setupPK = function() {
     this.initMembers();
     this._canEscape = false;
     this._canLose = true;
+    this.resetCamera();
+    this.actionResetZoom([1]);
 
     delete $gameTroop;
     $gameTroop = $gameNetParty;
@@ -555,12 +557,7 @@ BattleManager.setupPK = function() {
     //this.makeEscapeRatio();
 };
 
-Yanfly.ASP3.BattleManager_setupPK = BattleManager.setupPK;
-BattleManager.setupPK = function() {
-    this.resetCamera();
-		this.actionResetZoom([1]);
-		Yanfly.ASP3.BattleManager_setupPK.call(this);
-};
+
 
 function Spriteset_PKBattle() {
     this.initialize.apply(this, arguments);
