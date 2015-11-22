@@ -2,11 +2,12 @@ function NetworkManager() {
     throw new Error('This is a static class');
 }
 
-NetworkManager.serverUrl = 'ws://nekomimigame.com:10093/';
+NetworkManager.serverUrl = 'ws://localhost:7681/' //'ws://nekomimigame.com:10093/';
 NetworkManager.websocket = null;
 NetworkManager.state = 0;//0:normal 1:connecting 2:connected
 NetworkManager.waitCount = 0;
 NetworkManager.connect = function() {
+    InfoBox.addInfo('本地版本:'+ $version +' 尝试连接服务器...');
     console.log("try to Connect WebSocket server.");
     if (this.websocket != null) {
         this.websocket.close();
@@ -14,10 +15,10 @@ NetworkManager.connect = function() {
     this.state = 1;
     this.websocket = new WebSocket(this.serverUrl,'my-protocol');
     this.websocket.onopen = function (evt) {
-        NetworkManager.state = 2;
+        
         console.log("Connected to WebSocket server.");
-        //NetworkManager.sendMsg('start');
-        InfoBox.addInfo('与联机服务器连接成功');
+        NetworkManager.sendMsg('version:'+$version);
+        InfoBox.addInfo('验证版本...');
         }; 
         
     this.websocket.onclose = function (evt) {
@@ -57,7 +58,7 @@ NetworkManager.waitToSuccess = function (state) {
     }
 }
 NetworkManager.sendMsg = function (data) {
-    if (this.state != 2) {
+    if (this.state == 0) {
         return;
     }
      this.websocket.send(data);
@@ -85,6 +86,18 @@ NetworkManager.msgProc = function(data) {
     var val = valPart.split(',');
 
     switch(msgHead){
+        case 'version':
+        {
+            if (val[0] != $version) {
+                NetworkManager.disconnect();
+                InfoBox.addInfo('版本不符，断开连接');
+            }
+            else
+            {
+                InfoBox.addInfo('与联机服务器连接成功');
+                NetworkManager.state = 2;
+            }
+        }
         case 'Appear':
         {
            console.log(valPart);
@@ -92,6 +105,7 @@ NetworkManager.msgProc = function(data) {
            newPlayer.Id = parseInt(val[0]);
            newPlayer.setPosition(parseInt(val[1]),parseInt(val[2]));
            newPlayer.netName = val[3];
+           newPlayer.PKflag = val[4];
            NetworkPlayerManager.AddMapPlayer(newPlayer);
            break;
         }
@@ -111,10 +125,51 @@ NetworkManager.msgProc = function(data) {
         case 'PreparePK':
         {
             console.log(valPart);
-            NetworkPlayerManager.PrepareMapPlayerPK(parseInt(val[0]),val[1]);
+            var pos1 = valPart.indexOf('[');
+            var pos2 = valPart.indexOf(']') +1;
+            var datae = "";
+            datae = valPart.slice(pos1,pos2);
+            pos1 = valPart.indexOf('[',pos2);
+            pos2 = valPart.indexOf(']',pos2) +1;
+            var datas = "";
+            datas = valPart.slice(pos1,pos2);
+            
+            pos1 = valPart.indexOf(',',pos2);
+            var name = "";
+            name = valPart.slice(pos1+1);
+            console.log(datae);
+            NetworkPlayerManager.PrepareMapPlayerPK(parseInt(val[0]),
+            parseInt(val[1]),parseInt(val[2]),parseInt(val[3]),
+            parseInt(val[4]),datae,datas,name);
             break;
         }
-           
+        case 'StartPK':
+        {
+                        console.log(valPart);
+            var pos1 = valPart.indexOf('[');
+            var pos2 = valPart.indexOf(']') +1;
+            var datae = "";
+            datae = valPart.slice(pos1,pos2);
+            pos1 = valPart.indexOf('[',pos2);
+            pos2 = valPart.indexOf(']',pos2) +1;
+            var datas = "";
+            datas = valPart.slice(pos1,pos2);
+            
+            pos1 = valPart.indexOf(',',pos2);
+            var name = "";
+            name = valPart.slice(pos1+1);
+            console.log(datae);
+            NetworkPlayerManager.StartMapPlayerPK(parseInt(val[0]),
+            parseInt(val[1]),parseInt(val[2]),parseInt(val[3]),
+            parseInt(val[4]),datae,datas,name);
+            break;
+        }
+        case 'BattleAction':
+        {
+            console.log(valPart);
+            NetworkPlayerManager.OnMsgStartTurn(parseInt(val[0]),val[1]);
+            break;
+        }
     }
 }
 
@@ -364,6 +419,39 @@ function NetworkPlayerManager() {
     throw new Error('This is a static class');
 }
 
+NetworkPlayerManager.autoFlag = false;
+NetworkPlayerManager.PKflag = 1;
+NetworkPlayerManager.isBattleOnline = function(){
+    if (NetworkManager.state == 0) {
+        return false;
+    }
+    if (this.NetPlayerActors.length == 0) {
+        return false;
+    }
+
+    return true;
+}
+NetworkPlayerManager.updateMove = function() {
+    this.MapPlayerList.forEach(function(mapPlayer) {
+        if (this.PKflag == 1 &&
+        mapPlayer.x == $gamePlayer.x &&
+        mapPlayer.y == $gamePlayer.y) {
+            $gameParty.battleMembers().forEach(function(member) {
+            NetworkManager.sendMsg("StartPK:"+mapPlayer.Id+
+            ","+$gameParty.battleMembers().length+
+            ","+member.actorId()+
+            ","+member._level+
+            ","+member._classId+ 
+            ","+JsonEx.stringify(member._equips)+
+            ","+JsonEx.stringify(member._skills)+
+            ","+member.name());
+        }, this);
+                $gameSystem.disableEncounter();
+            }
+    }, this);
+}
+
+
 NetworkPlayerManager.MapPlayerList =[];
 NetworkPlayerManager.AddMapPlayer = function(newPlayer){
     this.DelMapPlayer(newPlayer.Id);
@@ -412,6 +500,20 @@ NetworkPlayerManager.DelMapPlayer = function(id){
         if (player.Id == id) {
             player.deleteState = 1 ;
             break;
+        }
+    }
+    if (this.battleState == 2) {
+        var list = this.NetPlayerActors;
+        for (var i = 0; i < list.length; i++) {
+            var player = list[i];
+            if (player.Id == id) {
+                player.autoFlag = true ;
+                InfoBox.addInfo(player._name+" 已经掉线，切换为自动模式");
+            }
+        }
+        if (this.msgCount >= this.NetPlayerActors.length) {
+            this.msgCount = 0;
+            BattleManager.startNetTurn();
         }
     }
     console.log(list);
@@ -472,12 +574,136 @@ BattleManager.updateBattleEnd = function() {
     this._phase = null;
 };
 
-
+$tmpParty = null;
+$tmpActor = null;
 NetworkPlayerManager.NetPlayerActors = [];
-NetworkPlayerManager.PrepareMapPlayerPK = function(id,level){
-    if (id&&!$gameParty.inBattle()) {
+NetworkPlayerManager.PlayerBattleActors = [];
+NetworkPlayerManager.msgCount = 0;
+NetworkPlayerManager.idInBattle = function(id){
+    var list = this.NetPlayerActors;
+    for (var i = 0; i < list.length; i++) {
+        var player = list[i];
+        if (player.Id == id) {
+            return true;
+        }
+    }
+    return false;
+}
+NetworkPlayerManager.OnMsgStartTurn = function(id,data){
+    if (this.isBattleOnline()) {
+        $gameTroop.members().forEach(function(member) {
+            if (id == member.netId) {
+                member._actions = JsonEx.parse(data);
+                this.msgCount ++;
+            }
+        }, this);
+        if (this.msgCount >= this.NetPlayerActors.length) {
+            this.msgCount = 0;
+            BattleManager.startNetTurn();
+        }
+    }
+}
+
+NetworkPlayerManager.StartMapPlayerPK = function(id,count,actid,lv,cls,datae,datas,name){
+    if ($gameParty.inBattle() || NetworkPlayerManager.PKflag != 1) {
+        return;
+    }
+
+        var enemy = new Game_OtherActor(id,actid);
+        enemy.changeLevel(lv,false);
+        enemy._classId = cls
+        enemy._name = name;
+        enemy._equips = [];
+        enemy._skills = [];
+        JsonEx.parse(datae).forEach(function(equip) {
+            enemy._equips.push(equip);
+        }, this);
+        JsonEx.parse(datas).forEach(function(skill) {
+            enemy._skills.push(skill);
+        }, this);
+        enemy.refresh();
+        enemy.recoverAll();
+        enemy.autoflag = false;
+        enemy.recoverAll();
+        this.NetPlayerActors.push(enemy);
+        if (this.NetPlayerActors.length < count) {
+            return false;
+        }
+        $tmpParty = JsonEx.makeDeepCopy($gameParty);
+        $tmpActor = JsonEx.makeDeepCopy($gameActors);
+        BattleManager.battleState = 2;
+        BattleManager.setupPK();
+        
+//           BattleManager.setEventCallback(function(n) {
+//               this._branch[this._indent] = n;
+//           }.bind(this));
+        NetworkPlayerManager.PKflag = 2;
+        
+
+        $gameSystem.enableEncounter();
+        $gamePlayer.makeEncounterCount();
+        SceneManager.push(Scene_Battle);
+}
+
+NetworkPlayerManager.send = false;
+NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,datas,name){
+    if (!$gameParty.inBattle() && !NetworkPlayerManager.send) {
         $gameParty.battleMembers().forEach(function(member) {
-            var enemy = new Game_OtherActor(member.actorId());
+        NetworkManager.sendMsg("ReadyPK:"+id+
+        ","+$gameParty.battleMembers().length+
+        ","+member.actorId()+
+        ","+member._level+
+        ","+member._classId+ 
+        ","+JsonEx.stringify(member._equips)+
+        ","+JsonEx.stringify(member._skills)+
+        ","+member.name());
+        }, this);
+        NetworkPlayerManager.send = true;
+    }
+    
+        var enemy = new Game_OtherActor(id,actid);
+        enemy.changeLevel(lv,false);
+        enemy._classId = cls
+        enemy._name = name;
+        enemy._equips = [];
+        enemy._skills = [];
+        JsonEx.parse(datae).forEach(function(equip) {
+            enemy._equips.push(equip);
+        }, this);
+        JsonEx.parse(datas).forEach(function(skill) {
+            enemy._skills.push(skill);
+        }, this);
+        enemy.refresh();
+        enemy.recoverAll();
+        enemy.autoflag = false;
+        enemy.recoverAll();
+        this.NetPlayerActors.push(enemy);
+        if (this.NetPlayerActors.length < count) {
+            return false;
+        }
+        $tmpParty = JsonEx.makeDeepCopy($gameParty);
+        $tmpActor = JsonEx.makeDeepCopy($gameActors);
+        BattleManager.battleState = 2;
+        BattleManager.setupPK();
+        NetworkPlayerManager.send = false;
+//           BattleManager.setEventCallback(function(n) {
+//               this._branch[this._indent] = n;
+//           }.bind(this));
+        NetworkPlayerManager.PKflag = 2;
+        
+
+        $gameSystem.enableEncounter();
+        $gamePlayer.makeEncounterCount();
+        SceneManager.push(Scene_Battle);
+    
+}
+
+NetworkPlayerManager.PrepareMapPlayerBattle = function(id,level){
+    if (!$gameParty.inBattle()) {
+        $tmpParty = JsonEx.makeDeepCopy($gameParty);
+        $tmpActor = JsonEx.makeDeepCopy($gameActors);
+        $gameParty.battleMembers().forEach(function(member) {
+            var enemy = new Game_OtherActor(id,member.actorId());
             enemy.changeLevel(member._level,false);
             enemy._classId = member._classId
             enemy._name = member._name;
@@ -498,11 +724,12 @@ NetworkPlayerManager.PrepareMapPlayerPK = function(id,level){
             enemy.refresh();
             enemy.recoverAll();
             member.recoverAll();
-            this.NetPlayerActors.push(enemy);
+            enemy.autoflag = true;
+            this.PlayerBattleActors.push(enemy);
         }, this);
 
         BattleManager.battleState = 2;
-        BattleManager.setupPK();
+        BattleManager.setupPKC();
         
 //           BattleManager.setEventCallback(function(n) {
 //               this._branch[this._indent] = n;
@@ -524,21 +751,18 @@ BattleManager.endBattle = function(result) {
     }
     
     NetworkPlayerManager.NetPlayerActors = [];
+    NetworkPlayerManager.PlayerBattleActors = [];
     if (BattleManager.battleState == 2) {
         delete $gameTroop;
         $gameTroop = new Game_Troop();
+        $gameParty = JsonEx.makeDeepCopy($tmpParty);
+        $gameActors = JsonEx.makeDeepCopy($tmpActor);
+        NetworkPlayerManager.PKflag = 1;
     }
     BattleManager.battleState = 0;
 };
 
-Game_NetParty.prototype.onBattleEnd = function() {
-    this._inBattle = false;
-    this.members().forEach(function(member) {
-        member.onBattleEnd();
-        delete member;
-    });
 
-};
 
 
 BattleManager.setupPK = function() {
@@ -552,6 +776,22 @@ BattleManager.setupPK = function() {
     $gameTroop = $gameNetParty;
     
     $gameTroop.setup();
+    $gameScreen.onBattleStart();
+    
+    //this.makeEscapeRatio();
+};
+
+BattleManager.setupPKC = function() {
+    this.initMembers();
+    this._canEscape = false;
+    this._canLose = true;
+    this.resetCamera();
+    this.actionResetZoom([1]);
+
+    delete $gameTroop;
+    $gameTroop = $gameNetParty;
+    
+    $gameTroop.setupPKC();
     $gameScreen.onBattleStart();
     
     //this.makeEscapeRatio();
@@ -578,6 +818,17 @@ Game_NetParty.prototype.initialize = function() {
     Game_Unit.prototype.initialize.call(this);
     this._interpreter = new Game_Interpreter();
     this.clear();
+    this.battleState = 0;
+    this.PKflag = 0;
+};
+
+Game_NetParty.prototype.onBattleEnd = function() {
+    this._inBattle = false;
+    this.members().forEach(function(member) {
+        member.onBattleEnd();
+        delete member;
+    });
+
 };
 
 Game_NetParty.prototype.isEventRunning = function() {
@@ -610,6 +861,18 @@ Game_NetParty.prototype.setup = function() {
         return
     }
     NetworkPlayerManager.NetPlayerActors.forEach(function(member) {
+            this._enemies.push(member);
+    }, this);
+};
+
+
+Game_NetParty.prototype.setupPKC = function() {
+    this.clear();
+    this._enemies = [];
+    if (!NetworkPlayerManager.PlayerBattleActors.length) {
+        return
+    }
+    NetworkPlayerManager.PlayerBattleActors.forEach(function(member) {
             this._enemies.push(member);
     }, this);
 };
@@ -807,6 +1070,58 @@ Game_NetParty.prototype.updateAIPatterns = function() {
     }
 };
 
+Game_NetParty.prototype.canInput = function() {
+    return this.members().some(function(actor) {
+        return actor.canInput();
+    });
+};
+
+Game_Unit.prototype.canInput = function() {
+        return false;
+};
+
+
+BattleManager.update = function() {
+    if (!this.isBusy() && !this.updateEvent()) {
+        switch (this._phase) {
+        case 'start':
+            this.startInput();
+            break;
+        case 'turn':
+            this.updateTurn();
+            break;
+        case 'action':
+            this.updateAction();
+            break;
+        case 'phaseChange':
+            this.updatePhase();
+            break;
+        case 'actionList':
+            this.updateActionList()
+            break;
+        case 'actionTargetList':
+            this.updateActionTargetList()
+            break;
+        case 'turnEnd':
+            this.updateTurnEnd();
+            break;
+        case 'battleEnd':
+            this.updateBattleEnd();
+            break;
+        }
+    }
+};
+
+BattleManager.startInput = function() {
+    this._phase = 'input';
+    $gameParty.makeActions();
+    $gameTroop.makeActions();
+    this.clearActor();
+    if ((this._surprise || !$gameParty.canInput()) &&
+         !$gameTroop.canInput()) {
+        this.startTurn();
+    }
+};
 
 
 function Sprite_EnemyActor() {
@@ -908,6 +1223,14 @@ Sprite_EnemyActor.prototype.updateBitmap = function() {
     }
 };
 
+Game_Battler.prototype.performReflection = function() {
+    Yanfly.BEC.Game_Battler_performReflection.call(this);
+		if (!$gameSystem.isSideView() && this.isActor()) return;
+		var animationId = this.reflectAnimationId();
+		var mirror = this.isActor() && !this.isEnemyActor;
+		this.startAnimation(animationId, mirror, 0);
+};
+
 function Game_OtherActor() {
     this.initialize.apply(this, arguments);
 }
@@ -915,8 +1238,10 @@ function Game_OtherActor() {
 Game_OtherActor.prototype = Object.create(Game_Actor.prototype);
 Game_OtherActor.prototype.constructor = Game_OtherActor;
 
-Game_OtherActor.prototype.initialize = function(actorId) {
+Game_OtherActor.prototype.initialize = function(id,actorId) {
     Game_Battler.prototype.initialize.call(this);
+    this.netId = id;
+    this.autoflag = true;
     this.setup(actorId);
 };
 
@@ -940,6 +1265,7 @@ Game_OtherActor.prototype.setup = function(actorId) {
 };
 
 Game_OtherActor.prototype.startAnimation = function(animationId, mirror, delay) {
+    
     var data = { animationId: animationId, mirror: mirror, delay: delay };
     this._animations.push(data);
 };
@@ -1008,6 +1334,24 @@ Game_OtherActor.prototype.makeActions = function() {
     } else if (this.isConfused()) {
         this.makeConfusionActions();
     }
+    else{
+        this.makeNetActions();
+    }
+};
+
+Game_OtherActor.prototype.makeNetActions = function() {
+    for (var i = 0; i < this.numActions(); i++) {
+        var list = this.makeActionList();
+        var maxValue = Number.MIN_VALUE;
+        for (var j = 0; j < list.length; j++) {
+            var value = list[j].evaluate();
+            if (value > maxValue) {
+                maxValue = value;
+                this.forceAction(list[j]._item.itemId(), -1);
+            }
+        }
+    }
+    this.setActionState('waiting');
 };
 
 Game_OtherActor.prototype.makeAutoBattleActions = function() {
@@ -1018,9 +1362,7 @@ Game_OtherActor.prototype.makeAutoBattleActions = function() {
             var value = list[j].evaluate();
             if (value > maxValue) {
                 maxValue = value;
-                //this.setAction(i, list[j]);
                 this.forceAction(list[j]._item.itemId(), -1);
-                console.log(list[j]._item.itemId());
             }
         }
     }
@@ -1082,7 +1424,7 @@ Game_OtherActor.prototype.makeActionList = function() {
     return list;
 };
 Game_OtherActor.prototype.isAutoBattle = function() {
-    return true;
+    return this.autoflag;
 };
 
 Game_OtherActor.prototype.isOnline = function() {
@@ -1174,6 +1516,27 @@ Game_Action.prototype.setSubject = function(subject) {
 
 BattleManager.startTurn = function() {
     this._phase = 'turn';
+    console.log(NetworkPlayerManager.isBattleOnline());
+    if (NetworkPlayerManager.isBattleOnline()) {
+        $gameTroop.members().forEach(function(member) {
+            NetworkManager.sendMsg("BattleActions:"+member.netId+","+JsonEx.stringify(member._actions));
+        }, this);
+        return;
+    }
+    this.clearActor();
+    $gameTroop.increaseTurn();
+    this._performedBattlers = [];
+    this.makeActionOrders();
+    if (this.battleState == 2)
+        $gameTroop.requestMotionRefresh();
+    $gameParty.requestMotionRefresh();
+
+    this._logWindow.startTurn();
+    this._subject = this.getNextSubject();
+    console.log(this._subject);
+};
+
+BattleManager.startNetTurn = function() {
     this.clearActor();
     $gameTroop.increaseTurn();
     this._performedBattlers = [];
@@ -1253,4 +1616,32 @@ Game_Item.prototype.setObject = function(item) {
         this._dataClass = '';
     }
     this._itemId = item ? item.id : 0;
+};
+
+
+
+BattleManager.actionActionAnimation = function(actionArgs) {
+    if (actionArgs && actionArgs[0]) {
+      var targets = this.makeActionTargets(actionArgs[0]);
+    } else {
+      var targets = this._targets;
+    }
+    var mirror = false;
+    if (actionArgs && actionArgs[1]) {
+      if (actionArgs[1].toUpperCase() === 'MIRROR') mirror = true;
+    }
+    var subject = this._subject;
+    (subject.isActor() && subject.isEnemyActor()) ? mirror = !mirror: mirror;
+    var group = targets.filter(Yanfly.Util.onlyUnique);
+    var aniId = this._action.item().animationId;
+    if (aniId < 0) {
+      if (mirror) {
+        this._logWindow.showActorAtkAniMirror(subject, group);
+      } else {
+        this._logWindow.showAttackAnimation(subject, group);
+      }
+    } else {
+      this._logWindow.showNormalAnimation(group, aniId, mirror);
+    }
+    return true;
 };

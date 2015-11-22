@@ -109,7 +109,6 @@ AudioManager.shouldUseHtml5Audio = function() {
 };
 
 
-
 Scene_Map.prototype.onMapLoaded = function() {
     if (this._transfer) {
         $gamePlayer.performTransfer();
@@ -121,8 +120,10 @@ Scene_Map.prototype.onMapLoaded = function() {
 
 Game_Player.prototype.moveStraight = function(d) {
     if (this.canPass(this.x, this.y, d)) {
+        NetworkPlayerManager.updateMove();
         this._followers.updateMove();
-        NetworkManager.sendMsg("MoveStraight:"+ d +"," + this.realMoveSpeed());
+        NetworkManager.sendMsg("MoveStraight:"+ d +"," +
+         this.realMoveSpeed());
     }
     Game_Character.prototype.moveStraight.call(this, d);
 };
@@ -137,7 +138,12 @@ Game_Player.prototype.reserveTransfer = function(mapId, x, y, d, fadeType) {
     NetworkPlayerManager.MapPlayerList.forEach(function(player){
         NetworkPlayerManager.DelMapPlayer(player.Id);
     }, this);
-    NetworkManager.sendMsg("MapChange:"+mapId+","+x+","+y+","+$gamePlayer.actorName());
+    NetworkManager.sendMsg("MapChange:"+mapId+
+    ","+x+","+y+
+    ","+NetworkPlayerManager.PKFlag+
+    ","+$gamePlayer.actorName()
+    );
+    NetworkPlayerManager.PKflag = 1;
 };
 
 Game_Player.prototype.actorName = function() {
@@ -153,7 +159,12 @@ Scene_Load.prototype.onLoadSuccess = function() {
     NetworkPlayerManager.MapPlayerList.forEach(function(player){
         NetworkPlayerManager.DelMapPlayer(player.Id);
     }, this);
-    NetworkManager.sendMsg("MapChange:"+$gameMap.mapId()+","+$gamePlayer.x+","+$gamePlayer.y+","+$gamePlayer.actorName());
+    NetworkManager.sendMsg("MapChange:"+$gameMap.mapId()+
+    ","+$gamePlayer.x+
+    ","+$gamePlayer.y+
+    ","+NetworkPlayerManager.PKflag+
+    ","+$gamePlayer.actorName()
+    );
 };
 
 
@@ -301,3 +312,5 @@ SceneManager.onSceneStart = function() {
     Graphics.endLoading();
     this._scene.showListBox();
 };
+
+$version = "0.22"
