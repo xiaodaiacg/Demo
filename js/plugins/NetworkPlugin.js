@@ -429,7 +429,7 @@ NetworkPlayerManager.isBattleOnline = function(){
         return false;
     }
 
-    return true;
+    return false;
 }
 NetworkPlayerManager.updateMove = function() {
     this.MapPlayerList.forEach(function(mapPlayer) {
@@ -623,7 +623,7 @@ NetworkPlayerManager.StartMapPlayerPK = function(id,count,actid,lv,cls,datae,dat
         }, this);
         enemy.refresh();
         enemy.recoverAll();
-        enemy.autoflag = false;
+        enemy.autoflag = true;
         enemy.recoverAll();
         this.NetPlayerActors.push(enemy);
         if (this.NetPlayerActors.length < count) {
@@ -685,7 +685,7 @@ NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,d
         $tmpActor = JsonEx.makeDeepCopy($gameActors);
         BattleManager.battleState = 2;
         BattleManager.setupPK();
-        NetworkPlayerManager.send = false;
+        NetworkPlayerManager.send = true;
 //           BattleManager.setEventCallback(function(n) {
 //               this._branch[this._indent] = n;
 //           }.bind(this));
