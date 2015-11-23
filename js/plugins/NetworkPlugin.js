@@ -84,7 +84,6 @@ NetworkManager.msgProc = function(data) {
     
     console.log(msgHead);
     var val = valPart.split(',');
-
     switch(msgHead){
         case 'version':
         {
@@ -164,10 +163,30 @@ NetworkManager.msgProc = function(data) {
             parseInt(val[4]),datae,datas,name);
             break;
         }
+        case 'RndTable':
+        {
+            console.log(valPart);
+            NetworkManager.start = false;
+            NetworkManager.RandTable = [];
+            NetworkManager.RandCount = 0;
+            val.forEach(function(element) {
+                NetworkManager.RandTable.push(element);
+            }, this);
+
+            console.log(NetworkManager.RandTable);
+        }
         case 'BattleAction':
         {
             console.log(valPart);
-            NetworkPlayerManager.OnMsgStartTurn(parseInt(val[0]),val[1]);
+            pos1 = valPart.indexOf('[');
+            pos2 = valPart.indexOf(']') +1;
+            var data = "";
+            data = valPart.slice(pos1,pos2);
+            pos1 = valPart.indexOf('{',pos2);
+            pos2 = valPart.indexOf('}',pos2) +1;
+            var data2 = "";
+            data2 = valPart.slice(pos1,pos2);
+            NetworkPlayerManager.OnMsgStartTurn(parseInt(val[0]),data,data2);
             break;
         }
     }
@@ -260,6 +279,9 @@ function InfoLine(text) {
 //    this.sprite.anchor.y = 1;
     this.text = text;
 };
+
+
+
 
 
 function InfoBox() {
@@ -419,8 +441,6 @@ function NetworkPlayerManager() {
     throw new Error('This is a static class');
 }
 
-NetworkPlayerManager.autoFlag = false;
-NetworkPlayerManager.PKflag = 1;
 NetworkPlayerManager.isBattleOnline = function(){
     if (NetworkManager.state == 0) {
         return false;
@@ -428,12 +448,21 @@ NetworkPlayerManager.isBattleOnline = function(){
     if (this.NetPlayerActors.length == 0) {
         return false;
     }
+    if (this.NetPlayerActors.some(function(actor) {
+        return actor.autoflag;
+        })) {
+            return false;
+        }
+    if ($gameParty.inBattle()) {
+        return true;
+    }
 
     return false;
 }
 NetworkPlayerManager.updateMove = function() {
     this.MapPlayerList.forEach(function(mapPlayer) {
-        if (this.PKflag == 1 &&
+        if (mapPlayer.PKflag == 1 &&
+        $gameParty.PKflag == 1 &&
         mapPlayer.x == $gamePlayer.x &&
         mapPlayer.y == $gamePlayer.y) {
             $gameParty.battleMembers().forEach(function(member) {
@@ -502,23 +531,25 @@ NetworkPlayerManager.DelMapPlayer = function(id){
             break;
         }
     }
-    if (this.battleState == 2) {
+    if (this.isBattleOnline()) {
         var list = this.NetPlayerActors;
         for (var i = 0; i < list.length; i++) {
             var player = list[i];
-            if (player.Id == id) {
-                player.autoFlag = true ;
+            if (player.netId == id) {
+                player.autoflag = true;
                 InfoBox.addInfo(player._name+" 已经掉线，切换为自动模式");
+                this.msgCount++;
             }
         }
         if (this.msgCount >= this.NetPlayerActors.length) {
             this.msgCount = 0;
-            BattleManager.startNetTurn();
+            this._phase = 'turn';
+            BattleManager.isReady = true;
         }
     }
     console.log(list);
 };
-
+BattleManager.isReady = false;
 NetworkPlayerManager.MoveMapPlayerDir = function(id,dir,spd){
     var list = this.MapPlayerList;
     for (var i = 0; i < list.length; i++) {
@@ -583,29 +614,60 @@ NetworkPlayerManager.idInBattle = function(id){
     var list = this.NetPlayerActors;
     for (var i = 0; i < list.length; i++) {
         var player = list[i];
-        if (player.Id == id) {
+        if (player.netId == id) {
             return true;
         }
     }
     return false;
 }
-NetworkPlayerManager.OnMsgStartTurn = function(id,data){
+NetworkPlayerManager.OnMsgStartTurn = function(id,data,data2){
     if (this.isBattleOnline()) {
-        $gameTroop.members().forEach(function(member) {
-            if (id == member.netId) {
-                member._actions = JsonEx.parse(data);
-                this.msgCount ++;
+        var dic = {};
+        var dic2 = JsonEx.parse(data2)
+        var list = $gameParty.battleMembers();
+        for (var i = 0; i < list.length; i++) {
+            dic[i] = list[i].actorId();
+        }
+        
+        var actions = JsonEx.parse(data);
+        var index = 0;
+         
+        if (actions.length > 0) {
+            index = actions[0]._subjectEnemyIndex;
+            if (index == -1) {
+                index = dic2[actions[0]._subjectActorId];
             }
-        }, this);
+            console.log('iiii='+index);
+            actions[0]._subjectEnemyIndex = index;
+            actions.forEach(function(action) {
+                action._subjectActorId = 0;
+            }, this);
+        }
+        $gameTroop.members().forEach(function(member) {
+            if (member._actions.length == 0) {
+                return ;
+            }
+            if (index == member._actions[0]._subjectEnemyIndex) {
+                member._actions = JsonEx.makeDeepCopy(actions);      
+                
+                console.log('===================');
+                console.log(member._actions);
+                console.log('==================='); 
+            
+            }   
+            }, this);
+            this.msgCount ++;
+
         if (this.msgCount >= this.NetPlayerActors.length) {
             this.msgCount = 0;
-            BattleManager.startNetTurn();
+            this._phase = 'turn';
+            BattleManager.isReady = true;
         }
     }
 }
 
 NetworkPlayerManager.StartMapPlayerPK = function(id,count,actid,lv,cls,datae,datas,name){
-    if ($gameParty.inBattle() || NetworkPlayerManager.PKflag != 1) {
+    if ($gameParty.inBattle() || $gameParty.PKflag != 1) {
         return;
     }
 
@@ -623,8 +685,8 @@ NetworkPlayerManager.StartMapPlayerPK = function(id,count,actid,lv,cls,datae,dat
         }, this);
         enemy.refresh();
         enemy.recoverAll();
-        enemy.autoflag = true;
-        enemy.recoverAll();
+        enemy.autoflag = false;
+        //enemy.recoverAll();
         this.NetPlayerActors.push(enemy);
         if (this.NetPlayerActors.length < count) {
             return false;
@@ -637,7 +699,7 @@ NetworkPlayerManager.StartMapPlayerPK = function(id,count,actid,lv,cls,datae,dat
 //           BattleManager.setEventCallback(function(n) {
 //               this._branch[this._indent] = n;
 //           }.bind(this));
-        NetworkPlayerManager.PKflag = 2;
+        $gameParty.PKflagPKflag = 2;
         
 
         $gameSystem.enableEncounter();
@@ -647,7 +709,11 @@ NetworkPlayerManager.StartMapPlayerPK = function(id,count,actid,lv,cls,datae,dat
 
 NetworkPlayerManager.send = false;
 NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,datas,name){
-    if (!$gameParty.inBattle() && !NetworkPlayerManager.send) {
+    if ($gameParty.inBattle() || $gameParty.PKflag != 1) {
+        return;
+    }
+    
+    if (!NetworkPlayerManager.send) {
         $gameParty.battleMembers().forEach(function(member) {
         NetworkManager.sendMsg("ReadyPK:"+id+
         ","+$gameParty.battleMembers().length+
@@ -658,8 +724,11 @@ NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,d
         ","+JsonEx.stringify(member._skills)+
         ","+member.name());
         }, this);
+        NetworkManager.sendMsg("RndTable:"+id+
+        ","+NetworkManager.makeRandomTable(200))
         NetworkPlayerManager.send = true;
     }
+    
     
         var enemy = new Game_OtherActor(id,actid);
         enemy.changeLevel(lv,false);
@@ -676,7 +745,7 @@ NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,d
         enemy.refresh();
         enemy.recoverAll();
         enemy.autoflag = false;
-        enemy.recoverAll();
+        //enemy.recoverAll();
         this.NetPlayerActors.push(enemy);
         if (this.NetPlayerActors.length < count) {
             return false;
@@ -685,11 +754,13 @@ NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,d
         $tmpActor = JsonEx.makeDeepCopy($gameActors);
         BattleManager.battleState = 2;
         BattleManager.setupPK();
-        NetworkPlayerManager.send = true;
+        NetworkPlayerManager.send = false;
 //           BattleManager.setEventCallback(function(n) {
 //               this._branch[this._indent] = n;
 //           }.bind(this));
-        NetworkPlayerManager.PKflag = 2;
+        $gameParty.PKflag = 2;
+        
+        console.log("pppppppppppppppp");
         
 
         $gameSystem.enableEncounter();
@@ -757,7 +828,9 @@ BattleManager.endBattle = function(result) {
         $gameTroop = new Game_Troop();
         $gameParty = JsonEx.makeDeepCopy($tmpParty);
         $gameActors = JsonEx.makeDeepCopy($tmpActor);
-        NetworkPlayerManager.PKflag = 1;
+        $gameParty.PKflag = 1;
+        NetworkManager.RandTable = [];
+        NetworkManager.RandCount = 0;
     }
     BattleManager.battleState = 0;
 };
@@ -806,6 +879,10 @@ function Spriteset_PKBattle() {
 
 BattleManager.battleState = 0;
 
+Game_Unit.prototype.initialize = function() {
+    this._inBattle = false;
+    this.PKflag = 0;
+};
 
 function Game_NetParty() {
     this.initialize.apply(this, arguments);
@@ -819,8 +896,9 @@ Game_NetParty.prototype.initialize = function() {
     this._interpreter = new Game_Interpreter();
     this.clear();
     this.battleState = 0;
-    this.PKflag = 0;
 };
+
+
 
 Game_NetParty.prototype.onBattleEnd = function() {
     this._inBattle = false;
@@ -1008,18 +1086,29 @@ DataManager.createGameObjects = function() {
 
 NetworkManager.RandTable = [];
 NetworkManager.RandCount = 0;
+NetworkManager.start = false;
 
+NetworkManager.makeRandomTable = function(n){
+    NetworkManager.start = false;
+    NetworkManager.RandTable = [];
+    NetworkManager.RandCount = 0;
+    var rndtable = [];
+    for (var i = 0; i < n; i++) {
+        rndtable.push(Math.random().toFixed(6));
+    }
+    NetworkManager.RandTable = rndtable;
+    return NetworkManager.RandTable;
+}
 
 $randomtmp = Math.random;
 Math.random = function(){
     var list = NetworkManager.RandTable;
-    if (list.length == 0) {
+    if (list.length == 0 || !NetworkManager.start) {
         return $randomtmp.call();
     }
     console.log("Index ="+NetworkManager.RandCount);
     var rf = list[NetworkManager.RandCount];
     NetworkManager.RandCount ++;
-    console.log("Index ++ ="+NetworkManager.RandCount);
     if (NetworkManager.RandCount >= list.length) {
         NetworkManager.RandCount = 0;
     }
@@ -1082,6 +1171,11 @@ Game_Unit.prototype.canInput = function() {
 
 
 BattleManager.update = function() {
+        if (this._phase == 'start') {
+        if (NetworkPlayerManager.isBattleOnline()) {
+            this.waitForTurn();
+            }
+        }
     if (!this.isBusy() && !this.updateEvent()) {
         switch (this._phase) {
         case 'start':
@@ -1089,6 +1183,9 @@ BattleManager.update = function() {
             break;
         case 'turn':
             this.updateTurn();
+            break;
+        case 'wait':
+            this.waitForNet();
             break;
         case 'action':
             this.updateAction();
@@ -1113,7 +1210,11 @@ BattleManager.update = function() {
 };
 
 BattleManager.startInput = function() {
+    BattleManager.waitcount = 3000;
+    NetworkManager.start = true;
     this._phase = 'input';
+    this.sendmsgAction = false;
+    this.isReady = false;
     $gameParty.makeActions();
     $gameTroop.makeActions();
     this.clearActor();
@@ -1322,38 +1423,6 @@ Game_OtherActor.prototype.performCollapse = function() {
     }
 };
 
-Game_OtherActor.prototype.makeActions = function() {
-    Game_Battler.prototype.makeActions.call(this);
-    if (this.numActions() > 0) {
-        this.setActionState('undecided');
-    } else {
-        this.setActionState('waiting');
-    }
-    if (this.isAutoBattle()) {
-        this.makeAutoBattleActions();
-    } else if (this.isConfused()) {
-        this.makeConfusionActions();
-    }
-    else{
-        this.makeNetActions();
-    }
-};
-
-Game_OtherActor.prototype.makeNetActions = function() {
-    for (var i = 0; i < this.numActions(); i++) {
-        var list = this.makeActionList();
-        var maxValue = Number.MIN_VALUE;
-        for (var j = 0; j < list.length; j++) {
-            var value = list[j].evaluate();
-            if (value > maxValue) {
-                maxValue = value;
-                this.forceAction(list[j]._item.itemId(), -1);
-            }
-        }
-    }
-    this.setActionState('waiting');
-};
-
 Game_OtherActor.prototype.makeAutoBattleActions = function() {
     for (var i = 0; i < this.numActions(); i++) {
         var list = this.makeActionList();
@@ -1514,29 +1583,32 @@ Game_Action.prototype.setSubject = function(subject) {
 
 
 
-BattleManager.startTurn = function() {
-    this._phase = 'turn';
+BattleManager.startTurn = function() { 
     console.log(NetworkPlayerManager.isBattleOnline());
+    console.log('send '+ !this.sendmsgAction);
     if (NetworkPlayerManager.isBattleOnline()) {
-        $gameTroop.members().forEach(function(member) {
-            NetworkManager.sendMsg("BattleActions:"+member.netId+","+JsonEx.stringify(member._actions));
-        }, this);
-        return;
+
+        if(!this.sendmsgAction){
+            this._phase = 'wait';
+            BattleManager.waitcount = 1800;
+            var dic = {};
+            var list = $gameParty.battleMembers();
+            for (var i = 0; i < list.length; i++) {
+                dic[list[i].actorId()] = i;
+            }
+            var id = NetworkPlayerManager.NetPlayerActors[0].netId;
+            $gameParty.battleMembers().forEach(function(member) {
+                NetworkManager.sendMsg("BattleActions:"+id+
+                ","+JsonEx.stringify(member._actions)+
+                ","+JsonEx.stringify(dic));
+            }, this);
+            this.sendmsgAction = true;
+        }
+        if (!BattleManager.isReady) {
+           return;
+        }
     }
-    this.clearActor();
-    $gameTroop.increaseTurn();
-    this._performedBattlers = [];
-    this.makeActionOrders();
-    if (this.battleState == 2)
-        $gameTroop.requestMotionRefresh();
-    $gameParty.requestMotionRefresh();
-
-    this._logWindow.startTurn();
-    this._subject = this.getNextSubject();
-    console.log(this._subject);
-};
-
-BattleManager.startNetTurn = function() {
+    this._phase = 'turn';
     this.clearActor();
     $gameTroop.increaseTurn();
     this._performedBattlers = [];
@@ -1561,6 +1633,53 @@ BattleManager.updateTurn = function() {
     } else {
         this.endTurn();
     }
+};
+BattleManager.waitcount = 1800;
+
+BattleManager.waitForTurn = function() {
+    if (this.waitcount == 3000) {
+    InfoBox.addInfo('开始倒计时50s');
+    }
+    if (this.waitcount == 1800) {
+    InfoBox.addInfo('开始倒计时30s');
+    }
+    this.waitcount--;
+    if (this.waitcount == 600) {
+        InfoBox.addInfo('等待倒计时10s');
+    }
+    if (this.waitcount == 300) {
+    InfoBox.addInfo('等待倒计时5s');
+    }
+    if (this.waitcount == 180) {
+    InfoBox.addInfo('等待倒计时3s');
+    }
+    if (this.waitcount == 120) {
+    InfoBox.addInfo('等待倒计时2s');
+    }
+    if (this.waitcount == 60) {
+    InfoBox.addInfo('等待倒计时1s');
+    }
+    if (this.waitcount == 0) {
+    BattleManager.makeOtherAuto();
+    }
+}
+BattleManager.makeOtherAuto = function() {
+    NetworkPlayerManager.NetPlayerActors.forEach(function(member) {
+        member.autoflag = true;
+        member.makeAutoBattleActions();
+    }, this);
+    InfoBox.addInfo('超时，对方开始自动战斗');
+    BattleManager.startTurn();
+}
+
+BattleManager.waitForNet = function() {
+    if (this.battleState == 2)
+        $gameTroop.requestMotionRefresh();
+    $gameParty.requestMotionRefresh();
+    if (BattleManager.isReady) {
+        BattleManager.startTurn();
+    }
+    this.waitForTurn();
 };
 
 BattleManager.processTurn = function() {
@@ -1620,28 +1739,4 @@ Game_Item.prototype.setObject = function(item) {
 
 
 
-BattleManager.actionActionAnimation = function(actionArgs) {
-    if (actionArgs && actionArgs[0]) {
-      var targets = this.makeActionTargets(actionArgs[0]);
-    } else {
-      var targets = this._targets;
-    }
-    var mirror = false;
-    if (actionArgs && actionArgs[1]) {
-      if (actionArgs[1].toUpperCase() === 'MIRROR') mirror = true;
-    }
-    var subject = this._subject;
-    (subject.isActor() && subject.isEnemyActor()) ? mirror = !mirror: mirror;
-    var group = targets.filter(Yanfly.Util.onlyUnique);
-    var aniId = this._action.item().animationId;
-    if (aniId < 0) {
-      if (mirror) {
-        this._logWindow.showActorAtkAniMirror(subject, group);
-      } else {
-        this._logWindow.showAttackAnimation(subject, group);
-      }
-    } else {
-      this._logWindow.showNormalAnimation(group, aniId, mirror);
-    }
-    return true;
-};
+

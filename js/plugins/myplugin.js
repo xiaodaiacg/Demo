@@ -138,12 +138,12 @@ Game_Player.prototype.reserveTransfer = function(mapId, x, y, d, fadeType) {
     NetworkPlayerManager.MapPlayerList.forEach(function(player){
         NetworkPlayerManager.DelMapPlayer(player.Id);
     }, this);
+    $gameParty.PKflag = 1;
     NetworkManager.sendMsg("MapChange:"+mapId+
     ","+x+","+y+
-    ","+NetworkPlayerManager.PKFlag+
+    ","+$gameParty.PKflag+
     ","+$gamePlayer.actorName()
     );
-    NetworkPlayerManager.PKflag = 1;
 };
 
 Game_Player.prototype.actorName = function() {
@@ -162,7 +162,7 @@ Scene_Load.prototype.onLoadSuccess = function() {
     NetworkManager.sendMsg("MapChange:"+$gameMap.mapId()+
     ","+$gamePlayer.x+
     ","+$gamePlayer.y+
-    ","+NetworkPlayerManager.PKflag+
+    ","+$gameParty.PKflag+
     ","+$gamePlayer.actorName()
     );
 };
@@ -313,4 +313,4 @@ SceneManager.onSceneStart = function() {
     this._scene.showListBox();
 };
 
-$version = "0.22"
+$version = "0.23"
