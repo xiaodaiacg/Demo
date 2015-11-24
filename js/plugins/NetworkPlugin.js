@@ -1211,7 +1211,6 @@ BattleManager.update = function() {
 
 BattleManager.startInput = function() {
     BattleManager.waitcount = 3000;
-    NetworkManager.start = true;
     this._phase = 'input';
     this.sendmsgAction = false;
     this.isReady = false;
@@ -1584,6 +1583,7 @@ Game_Action.prototype.setSubject = function(subject) {
 
 
 BattleManager.startTurn = function() { 
+    NetworkManager.start = true;
     console.log(NetworkPlayerManager.isBattleOnline());
     console.log('send '+ !this.sendmsgAction);
     if (NetworkPlayerManager.isBattleOnline()) {
@@ -1634,6 +1634,21 @@ BattleManager.updateTurn = function() {
         this.endTurn();
     }
 };
+
+
+BattleManager.endTurn = function() {
+    this._phase = 'turnEnd';
+    this._preemptive = false;
+    this._surprise = false;
+    this.allBattleMembers().forEach(function(battler) {
+        battler.onTurnEnd();
+        this.refreshStatus();
+        this._logWindow.displayAutoAffectedStatus(battler);
+        this._logWindow.displayRegeneration(battler);
+    }, this);
+    NetworkManager.start = false;
+};
+
 BattleManager.waitcount = 1800;
 
 BattleManager.waitForTurn = function() {
