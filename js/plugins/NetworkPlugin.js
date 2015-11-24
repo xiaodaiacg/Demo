@@ -700,6 +700,7 @@ NetworkPlayerManager.StartMapPlayerPK = function(id,count,actid,lv,cls,datae,dat
 //               this._branch[this._indent] = n;
 //           }.bind(this));
         $gameParty.PKflagPKflag = 2;
+        BattleManager.isMain = true;
         
 
         $gameSystem.enableEncounter();
@@ -759,6 +760,7 @@ NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,d
 //               this._branch[this._indent] = n;
 //           }.bind(this));
         $gameParty.PKflag = 2;
+        BattleManager.isMain = false;
         
         console.log("pppppppppppppppp");
         
@@ -831,6 +833,7 @@ BattleManager.endBattle = function(result) {
         $gameParty.PKflag = 1;
         NetworkManager.RandTable = [];
         NetworkManager.RandCount = 0;
+        BattleManager.isMain = true;
     }
     BattleManager.battleState = 0;
 };
@@ -1580,6 +1583,25 @@ Game_Action.prototype.setSubject = function(subject) {
     }
 };
 
+BattleManager.isMain = true;
+BattleManager.makeActionOrders = function() {
+    var battlers = [];
+    if (!this._surprise) {
+        battlers = battlers.concat(this.isMain?
+        $gameParty.battleMembers():$gameTroop.members());
+    }
+    if (!this._preemptive) {
+        battlers = battlers.concat(this.isMain?
+        $gameTroop.members():$gameParty.battleMembers());
+    }
+    battlers.forEach(function(battler) {
+        battler.makeSpeed();
+    });
+    battlers.sort(function(a, b) {
+        return b.speed() - a.speed();
+    });
+    this._actionBattlers = battlers;
+};
 
 
 BattleManager.startTurn = function() { 
