@@ -313,4 +313,18 @@ SceneManager.onSceneStart = function() {
     this._scene.showListBox();
 };
 
+DataManager.isThisGameFile = function(savefileId) {
+    var globalInfo = this.loadGlobalInfo();
+    if (globalInfo && globalInfo[savefileId]) {
+        if (StorageManager.isLocalMode()) {
+            return true;
+        } else {
+            var savefile = globalInfo[savefileId];
+            return (savefile.globalId === this._globalId);
+        }
+    } else {
+        return false;
+    }
+};
+
 $version = "0.23"

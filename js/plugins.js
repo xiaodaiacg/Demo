@@ -27,6 +27,5 @@ var $plugins =
 {"name":"CHSNameInput","status":true,"description":"","parameters":{}},
 {"name":"AutoSave","status":true,"description":"","parameters":{}},
 {"name":"myplugin","status":true,"description":"","parameters":{}},
-{"name":"NetBattleMgr","status":false,"description":"","parameters":{}},
 {"name":"KeyboardConfig","status":true,"description":"v1.00 Allows players to adjust their button configuration\nfor keyboards.","parameters":{"Command Name":"键盘设置","Key Help":"选择一个按键来修改","Default Layout":"默认布局","Default Help":"恢复到默认的键盘布局","WASD Layout":"WASD布局","WASD Help":"改变键盘设置为WSAD布局","Finish Config":"确认修改","Finish Help":"决定使用该布局","Assigned Color":"21","Action Color":"4","Clear Text":"清除","OK Key":"确认","OK Text":"确认 / 对话","Escape Key":"逃跑","Escape Text":"取消 / 菜单","Cancel Key":"取消","Cancel Text":"取消","Menu Key":"菜单","Menu Text":"菜单","Shift Key":"冲刺","Shift Text":"冲刺","PageUp Key":"PgUp","PageUp Text":"Page Up","PageDown Key":"PgDn","PageDown Text":"Page Down","Left Key":"◄","Left Text":"左箭头","Up Key":"▲","Up Text":"上箭头","Right Key":"►","Right Text":"右箭头","Down Key":"▼","Down Text":"下箭头"}}
 ];

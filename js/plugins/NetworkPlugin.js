@@ -528,7 +528,6 @@ NetworkPlayerManager.DelMapPlayer = function(id){
         var player = list[i];
         if (player.Id == id) {
             player.deleteState = 1 ;
-            break;
         }
     }
     if (this.isBattleOnline()) {
@@ -541,7 +540,7 @@ NetworkPlayerManager.DelMapPlayer = function(id){
                 this.msgCount++;
             }
         }
-        if (this.msgCount >= this.NetPlayerActors.length) {
+        if (this.msgCount >= $gameTroop.aliveMembers().length) {
             this.msgCount = 0;
             this._phase = 'turn';
             BattleManager.isReady = true;
@@ -637,28 +636,33 @@ NetworkPlayerManager.OnMsgStartTurn = function(id,data,data2){
             if (index == -1) {
                 index = dic2[actions[0]._subjectActorId];
             }
-            console.log('iiii='+index);
+            
             actions[0]._subjectEnemyIndex = index;
             actions.forEach(function(action) {
                 action._subjectActorId = 0;
             }, this);
         }
+        console.log('data='+data);
+        console.log('data2='+data2);
         $gameTroop.members().forEach(function(member) {
             if (member._actions.length == 0) {
                 return ;
             }
-            if (index == member._actions[0]._subjectEnemyIndex) {
-                member._actions = JsonEx.makeDeepCopy(actions);      
-                
+            if (index == member.index()) {
+                member.clearActions();
+                actions.forEach(function(action) {
+                    console.log(111111111);
+                    console.log(action);
+                    member.pushAction(action);
+                }, this);    
                 console.log('===================');
                 console.log(member._actions);
                 console.log('==================='); 
-            
             }   
             }, this);
             this.msgCount ++;
 
-        if (this.msgCount >= this.NetPlayerActors.length) {
+        if (this.msgCount >= $gameTroop.aliveMembers().length) {
             this.msgCount = 0;
             this._phase = 'turn';
             BattleManager.isReady = true;
@@ -684,15 +688,20 @@ NetworkPlayerManager.StartMapPlayerPK = function(id,count,actid,lv,cls,datae,dat
             enemy._skills.push(skill);
         }, this);
         enemy.refresh();
-        enemy.recoverAll();
         enemy.autoflag = false;
-        //enemy.recoverAll();
+        enemy.recoverAll();
         this.NetPlayerActors.push(enemy);
         if (this.NetPlayerActors.length < count) {
             return false;
         }
+        
         $tmpParty = JsonEx.makeDeepCopy($gameParty);
         $tmpActor = JsonEx.makeDeepCopy($gameActors);
+        
+        $gameParty.battleMembers().forEach(function(member) {
+            member.recoverAll();
+        }, this);
+        
         BattleManager.battleState = 2;
         BattleManager.setupPK();
         
@@ -707,6 +716,13 @@ NetworkPlayerManager.StartMapPlayerPK = function(id,count,actid,lv,cls,datae,dat
         $gamePlayer.makeEncounterCount();
         SceneManager.push(Scene_Battle);
 }
+
+Game_BattlerBase.prototype.recoverAll = function() {
+    this.clearStates();
+    this._hp = this.mhp;
+    this._mp = this.mmp;
+    this._tp = this.maxTp() * 0.5;
+};
 
 NetworkPlayerManager.send = false;
 NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,datas,name){
@@ -744,15 +760,18 @@ NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,d
             enemy._skills.push(skill);
         }, this);
         enemy.refresh();
-        enemy.recoverAll();
         enemy.autoflag = false;
-        //enemy.recoverAll();
+        enemy.recoverAll();
         this.NetPlayerActors.push(enemy);
         if (this.NetPlayerActors.length < count) {
             return false;
         }
         $tmpParty = JsonEx.makeDeepCopy($gameParty);
         $tmpActor = JsonEx.makeDeepCopy($gameActors);
+        
+        $gameParty.battleMembers().forEach(function(member) {
+            member.recoverAll();
+        }, this);
         BattleManager.battleState = 2;
         BattleManager.setupPK();
         NetworkPlayerManager.send = false;
@@ -762,7 +781,7 @@ NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,d
         $gameParty.PKflag = 2;
         BattleManager.isMain = false;
         
-        console.log("pppppppppppppppp");
+        
         
 
         $gameSystem.enableEncounter();
@@ -847,7 +866,7 @@ BattleManager.setupPK = function() {
     this._canLose = true;
     this.resetCamera();
     this.actionResetZoom([1]);
-
+    NetworkPlayerManager.msgCount = 0;
     delete $gameTroop;
     $gameTroop = $gameNetParty;
     
@@ -1110,6 +1129,7 @@ Math.random = function(){
         return $randomtmp.call();
     }
     console.log("Index ="+NetworkManager.RandCount);
+    //console.trace();
     var rf = list[NetworkManager.RandCount];
     NetworkManager.RandCount ++;
     if (NetworkManager.RandCount >= list.length) {
@@ -1440,6 +1460,15 @@ Game_OtherActor.prototype.makeAutoBattleActions = function() {
     this.setActionState('waiting');
 };
 
+
+Game_Battler.prototype.pushAction = function(action) {
+    var actionNew = new Game_Action(this, true);
+    actionNew._item._dataClass = action._item._dataClass;
+    actionNew._item._itemId = action._item._itemId;
+    actionNew.setTarget(action._targetIndex);
+    this._actions.push(actionNew);
+};
+
 Game_Battler.prototype.forceAction = function(skillId, targetIndex) {
     this.clearActions();
     var action = new Game_Action(this, true);
@@ -1588,17 +1617,22 @@ BattleManager.makeActionOrders = function() {
     var battlers = [];
     if (!this._surprise) {
         battlers = battlers.concat(this.isMain?
-        $gameParty.battleMembers():$gameTroop.members());
+        $gameParty.aliveMembers():$gameTroop.aliveMembers());
     }
     if (!this._preemptive) {
         battlers = battlers.concat(this.isMain?
-        $gameTroop.members():$gameParty.battleMembers());
+        $gameTroop.aliveMembers():$gameParty.aliveMembers());
     }
     battlers.forEach(function(battler) {
+        console.log(battler.isEnemyActor()? battler.name() + " 敌":battler.name());
         battler.makeSpeed();
+        console.log(battler.speed());
     });
     battlers.sort(function(a, b) {
         return b.speed() - a.speed();
+    });
+    battlers.forEach(function(battler) {
+        console.log(battler.isEnemyActor()? battler.name() + " 敌":battler.name());
     });
     this._actionBattlers = battlers;
 };
@@ -1619,7 +1653,7 @@ BattleManager.startTurn = function() {
                 dic[list[i].actorId()] = i;
             }
             var id = NetworkPlayerManager.NetPlayerActors[0].netId;
-            $gameParty.battleMembers().forEach(function(member) {
+            $gameParty.aliveMembers().forEach(function(member) {
                 NetworkManager.sendMsg("BattleActions:"+id+
                 ","+JsonEx.stringify(member._actions)+
                 ","+JsonEx.stringify(dic));
@@ -1738,42 +1772,22 @@ BattleManager.processTurn = function() {
     }
 };
 
-BattleManager.startAction = function() {
-    var subject = this._subject;
-    subject.onAllActionsEnd();
-    var action = subject.currentAction();
-    this._action = action;
-	var targets = action.makeTargets();
-    this._targets = targets;
-	this._allTargets = targets.slice();
-    this._individualTargets = targets.slice();
-		this._phase = 'phaseChange';
-		this._phaseSteps = ['setup', 'whole', 'target', 'follow', 'finish'];
-		this._returnPhase = '';
-		this._actionList = [];
-    subject.useItem(this._action.item());
-    this._action.applyGlobal();
-    this.refreshStatus();
-    this._logWindow.startAction(this._subject, this._action, this._targets);
+Game_Battler.prototype.speed = function() {
+    return this._speed;
 };
 
-
-
-Game_Item.prototype.setObject = function(item) {
-    if (DataManager.isSkill(item)) {
-        this._dataClass = 'skill';
-    } else if (DataManager.isItem(item)) {
-        this._dataClass = 'item';
-    } else if (DataManager.isWeapon(item)) {
-        this._dataClass = 'weapon';
-    } else if (DataManager.isArmor(item)) {
-        this._dataClass = 'armor';
-    } else {
-        this._dataClass = '';
-    }
-    this._itemId = item ? item.id : 0;
+Game_Battler.prototype.makeSpeed = function() {
+    console.log(this._actions.length);
+    this._speed = Math.min.apply(null, this._actions.map(function(action) {
+        return action.speed();
+    })) || 0;
 };
 
-
-
-
+Game_Action.prototype.speed = function() {
+    var agi = this.subject().agi;
+    var speed = eval(Yanfly.Param.BECActionSpeed);
+    if (this.item()) speed += this.item().speed;
+    if (this.isAttack()) speed += this.subject().attackSpeed();
+    console.log(speed);
+    return speed;
+};
