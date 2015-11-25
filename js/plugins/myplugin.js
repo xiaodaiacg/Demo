@@ -139,6 +139,7 @@ Game_Player.prototype.reserveTransfer = function(mapId, x, y, d, fadeType) {
         NetworkPlayerManager.DelMapPlayer(player.Id);
     }, this);
     $gameParty.PKflag = 1;
+    $gameSystem.enableEncounter();
     NetworkManager.sendMsg("MapChange:"+mapId+
     ","+x+","+y+
     ","+$gameParty.PKflag+
