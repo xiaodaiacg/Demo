@@ -2,7 +2,7 @@ function NetworkManager() {
     throw new Error('This is a static class');
 }
 
-NetworkManager.serverUrl = 'ws://nekomimigame.com:10093/';
+NetworkManager.serverUrl = 'ws://localhost:7681/' //'ws://nekomimigame.com:10093/';
 NetworkManager.websocket = null;
 NetworkManager.state = 0;//0:normal 1:connecting 2:connected
 NetworkManager.waitCount = 0;
@@ -23,6 +23,7 @@ NetworkManager.connect = function() {
         
     this.websocket.onclose = function (evt) {
         NetworkManager.state = 0;
+        this.keepAlive = false; 
         console.log("Disconnected"); 
         
         NetworkManager.websocket = null;
@@ -57,6 +58,23 @@ NetworkManager.waitToSuccess = function (state) {
         return 0;
     }
 }
+NetworkManager.update = function () {
+    if (this.state != 2) {
+        return;
+    }
+    if (!this.keepAlive) {
+        this.sendMsg("keepAlive:0");
+        this.keepAlive = true;
+        this.keepSendTime = Date.now();
+        this.endTime = Date.now() + 10000;
+    }
+    else{
+        if (Date.now() >= this.endTime) {
+             this.keepAlive = false;
+        }
+    }
+    return;
+}
 NetworkManager.sendMsg = function (data) {
     if (this.state == 0) {
         return;
@@ -66,6 +84,7 @@ NetworkManager.sendMsg = function (data) {
      }; 
 NetworkManager.disconnect = function () {
     if(this.websocket){
+        this.sendMsg("Disconnect");
         console.log("try to disconnect WebSocket server.");
 
         this.state = 0;
@@ -85,6 +104,14 @@ NetworkManager.msgProc = function(data) {
     console.log(msgHead);
     var val = valPart.split(',');
     switch(msgHead){
+        case 'keepAlive':
+        {
+            if (SceneManager._scene)
+            {
+                SceneManager._scene.drawTime('延迟:'+(Date.now() - this.keepSendTime)+'ms');
+            }
+            break;
+        }
         case 'version':
         {
             if (val[0] != $version) {
@@ -96,6 +123,7 @@ NetworkManager.msgProc = function(data) {
                 InfoBox.addInfo('与联机服务器连接成功');
                 NetworkManager.state = 2;
             }
+            break;
         }
         case 'Appear':
         {
@@ -104,7 +132,8 @@ NetworkManager.msgProc = function(data) {
            newPlayer.Id = parseInt(val[0]);
            newPlayer.setPosition(parseInt(val[1]),parseInt(val[2]));
            newPlayer.netName = val[3];
-           newPlayer.PKflag = val[4];
+           newPlayer.PKFlag = parseInt(val[4]);
+           newPlayer.battleState = parseInt(val[5]);
            NetworkPlayerManager.AddMapPlayer(newPlayer);
            break;
         }
@@ -174,6 +203,7 @@ NetworkManager.msgProc = function(data) {
             }, this);
 
             console.log(NetworkManager.RandTable);
+            break;
         }
         case 'BattleAction':
         {
@@ -189,6 +219,19 @@ NetworkManager.msgProc = function(data) {
             NetworkPlayerManager.OnMsgStartTurn(parseInt(val[0]),data,data2);
             break;
         }
+        case 'ChangePKFlag':
+        {
+           console.log(valPart);
+           NetworkPlayerManager.ChangeMapPlayer(parseInt(val[0]),'PKFlag',parseInt(val[1]));
+           break;
+        }
+        case 'ChangeBattleState':
+        {
+           console.log(valPart);
+           NetworkPlayerManager.ChangeMapPlayer(parseInt(val[0]),'battleState',parseInt(val[1]));
+           break;
+        }
+
     }
 }
 
@@ -263,16 +306,24 @@ Scene_Base.prototype.initialize = function() {
     this._backSprite = new Sprite(ImageManager.loadSystem('network'));
     this.backState = 0;
     this._infoBox = new Sprite(new Bitmap());
+    this._time = new Sprite(new Bitmap(128 ,48));
     if (InfoBox.sprite == null) {
         InfoBox.sprite = new Sprite(new Bitmap(Graphics.width ,Graphics.height));
     }
     
 };
 
+Scene_Base.prototype.drawTime = function(text) {
+    this._time.bitmap.clear();
+    this._time.bitmap.outlineWidth = 3;
+    this._time.bitmap.fontSize = 12;
+    this._time.bitmap.drawText(text, 16, 0, this._time.bitmap.width , this._time.bitmap.height, '');
+}
+
 
 
 function InfoLine(text) {
-    this.startTime = new Date().getTime();
+    this.startTime = Date.now();
     this.endTime = this.startTime + 5000;
    // this.sprite = new Sprite(ImageManager.loadSystem('GameOver'));
 //    this.sprite.anchor.x = 1;
@@ -351,11 +402,15 @@ Scene_Base.prototype.checkNetwork = function() {
         this.backState = NetworkManager.state
         if (NetworkManager.state == 2) {
             this._backSprite.visible = true;
+            this._time.visible = true;
             this.addChild(this._backSprite);
+            this.addChild(this._time);
         }else if(NetworkManager.state == 1){
             this._backSprite.visible = false;
+            this._time.visible = false;
         }else if(NetworkManager.state == 0){
             this._backSprite.visible = false;
+            this._time.visible = false;
         }
     }
 };
@@ -461,8 +516,8 @@ NetworkPlayerManager.isBattleOnline = function(){
 }
 NetworkPlayerManager.updateMove = function() {
     this.MapPlayerList.forEach(function(mapPlayer) {
-        if (mapPlayer.PKflag == 1 &&
-        $gameParty.PKflag == 1 &&
+        if (mapPlayer.PKFlag  == 1 &&
+        ConfigManager.PKFlag  == true &&
         mapPlayer.x == $gamePlayer.x &&
         mapPlayer.y == $gamePlayer.y) {
             $gameParty.battleMembers().forEach(function(member) {
@@ -475,7 +530,6 @@ NetworkPlayerManager.updateMove = function() {
             ","+JsonEx.stringify(member._skills)+
             ","+member.name());
         }, this);
-                $gameSystem.disableEncounter();
             }
     }, this);
 }
@@ -548,6 +602,27 @@ NetworkPlayerManager.DelMapPlayer = function(id){
     }
     console.log(list);
 };
+
+NetworkPlayerManager.ChangeMapPlayer = function(id,state,val){
+    var list = this.MapPlayerList;
+    for (var i = 0; i < list.length; i++) {
+        var player = list[i];
+        if (player.Id == id) {
+            switch (state) {
+                case 'PKFlag':
+                    player.PKFlag = val;
+                    break;
+            
+                case 'battleState':
+                    player.battleState = val;
+                    break;
+            }
+            player.updateState = 1 ;
+        }
+    }
+    console.log(list);
+};
+
 BattleManager.isReady = false;
 NetworkPlayerManager.MoveMapPlayerDir = function(id,dir,spd){
     var list = this.MapPlayerList;
@@ -671,7 +746,7 @@ NetworkPlayerManager.OnMsgStartTurn = function(id,data,data2){
 }
 
 NetworkPlayerManager.StartMapPlayerPK = function(id,count,actid,lv,cls,datae,datas,name){
-    if ($gameParty.inBattle() || $gameParty.PKflag != 1) {
+    if ($gameParty.inBattle() || ConfigManager.PKFlag != true) {
         return;
     }
 
@@ -708,7 +783,6 @@ NetworkPlayerManager.StartMapPlayerPK = function(id,count,actid,lv,cls,datae,dat
 //           BattleManager.setEventCallback(function(n) {
 //               this._branch[this._indent] = n;
 //           }.bind(this));
-        $gameParty.PKflagPKflag = 2;
         BattleManager.isMain = true;
         
 
@@ -726,7 +800,7 @@ Game_BattlerBase.prototype.recoverAll = function() {
 
 NetworkPlayerManager.send = false;
 NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,datas,name){
-    if ($gameParty.inBattle() || $gameParty.PKflag != 1) {
+    if ($gameParty.inBattle() || ConfigManager.PKFlag != true) {
         return;
     }
     
@@ -778,7 +852,6 @@ NetworkPlayerManager.PrepareMapPlayerPK = function(id,count,actid,lv,cls,datae,d
 //           BattleManager.setEventCallback(function(n) {
 //               this._branch[this._indent] = n;
 //           }.bind(this));
-        $gameParty.PKflag = 2;
         BattleManager.isMain = false;
         
         
@@ -820,7 +893,7 @@ NetworkPlayerManager.PrepareMapPlayerBattle = function(id,level){
             this.PlayerBattleActors.push(enemy);
         }, this);
 
-        BattleManager.battleState = 2;
+        BattleManager.battleState = 2; 
         BattleManager.setupPKC();
         
 //           BattleManager.setEventCallback(function(n) {
@@ -849,18 +922,19 @@ BattleManager.endBattle = function(result) {
         $gameTroop = new Game_Troop();
         $gameParty = JsonEx.makeDeepCopy($tmpParty);
         $gameActors = JsonEx.makeDeepCopy($tmpActor);
-        $gameParty.PKflag = 1;
         NetworkManager.RandTable = [];
         NetworkManager.RandCount = 0;
         BattleManager.isMain = true;
     }
     BattleManager.battleState = 0;
+    NetworkManager.sendMsg('ChangeBattleState:'+this.battleState);
 };
 
 
 
 
 BattleManager.setupPK = function() {
+    NetworkManager.sendMsg('ChangeBattleState:'+this.battleState);
     this.initMembers();
     this._canEscape = false;
     this._canLose = true;
@@ -877,6 +951,7 @@ BattleManager.setupPK = function() {
 };
 
 BattleManager.setupPKC = function() {
+    NetworkManager.sendMsg('ChangeBattleState:'+1);
     this.initMembers();
     this._canEscape = false;
     this._canLose = true;
@@ -892,6 +967,18 @@ BattleManager.setupPKC = function() {
     //this.makeEscapeRatio();
 };
 
+BattleManager.setup = function(troopId, canEscape, canLose) {
+    this.battleState = 1;
+    NetworkManager.sendMsg('ChangeBattleState:'+this.battleState);
+    this.initMembers();
+    this._canEscape = canEscape;
+    this._canLose = canLose;
+    this.resetCamera();
+    this.actionResetZoom([1]);
+    $gameTroop.setup(troopId);
+    $gameScreen.onBattleStart();
+    this.makeEscapeRatio();
+};
 
 
 function Spriteset_PKBattle() {
@@ -903,7 +990,6 @@ BattleManager.battleState = 0;
 
 Game_Unit.prototype.initialize = function() {
     this._inBattle = false;
-    this.PKflag = 0;
 };
 
 function Game_NetParty() {
@@ -1790,4 +1876,54 @@ Game_Action.prototype.speed = function() {
     if (this.isAttack()) speed += this.subject().attackSpeed();
     console.log(speed);
     return speed;
+};
+
+ConfigManager.PKFlag        = false;
+
+ConfigManager.makeData = function() {
+    var config = {};
+    config.alwaysDash = this.alwaysDash;
+    config.commandRemember = this.commandRemember;
+    config.bgmVolume = this.bgmVolume;
+    config.bgsVolume = this.bgsVolume;
+    config.meVolume = this.meVolume;
+    config.seVolume = this.seVolume;
+    config.PKFlag = this.PKFlag;
+    return config;
+};
+
+ConfigManager.applyData = function(config) {
+    this.alwaysDash = this.readFlag(config, 'alwaysDash');
+    this.commandRemember = this.readFlag(config, 'commandRemember');
+    this.bgmVolume = this.readVolume(config, 'bgmVolume');
+    this.bgsVolume = this.readVolume(config, 'bgsVolume');
+    this.meVolume = this.readVolume(config, 'meVolume');
+    this.seVolume = this.readVolume(config, 'seVolume');
+    this.PKFlag =  this.readFlag(config, 'PKFlag');
+};
+
+Window_Options.prototype.addGeneralOptions = function() {
+    this.addCommand('PK开关', 'PKFlag');
+    this.addCommand(TextManager.alwaysDash, 'alwaysDash');
+    this.addCommand(TextManager.commandRemember, 'commandRemember');
+};
+
+
+
+Window_Options.prototype.processOk = function() {
+    var index = this.index();
+    var symbol = this.commandSymbol(index);
+    var value = this.getConfigValue(symbol);
+    if (this.isVolumeSymbol(symbol)) {
+        value += this.volumeOffset();
+        if (value > 100) {
+            value = 0;
+        }
+        value = value.clamp(0, 100);
+        this.changeValue(symbol, value);
+    } else {
+        this.changeValue(symbol, !value);
+    }
+    
+    NetworkManager.sendMsg("ChangePKFlag:"+(ConfigManager.PKFlag?1:0));
 };

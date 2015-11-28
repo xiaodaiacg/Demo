@@ -138,11 +138,10 @@ Game_Player.prototype.reserveTransfer = function(mapId, x, y, d, fadeType) {
     NetworkPlayerManager.MapPlayerList.forEach(function(player){
         NetworkPlayerManager.DelMapPlayer(player.Id);
     }, this);
-    $gameParty.PKflag = 1;
     $gameSystem.enableEncounter();
     NetworkManager.sendMsg("MapChange:"+mapId+
     ","+x+","+y+
-    ","+$gameParty.PKflag+
+    ","+(ConfigManager.PKFlag?1:0)+
     ","+$gamePlayer.actorName()
     );
 };
@@ -163,7 +162,7 @@ Scene_Load.prototype.onLoadSuccess = function() {
     NetworkManager.sendMsg("MapChange:"+$gameMap.mapId()+
     ","+$gamePlayer.x+
     ","+$gamePlayer.y+
-    ","+$gameParty.PKflag+
+    ","+(ConfigManager.PKFlag?1:0)+
     ","+$gamePlayer.actorName()
     );
 };
@@ -182,6 +181,9 @@ Game_NetPlayer.prototype.initialize = function() {
     this.mapCreateSprite = null;
     this.deleteState = 0;
     this.netName = "Guest";
+    this.PKFlag = 0;
+    this.battleState = 0;
+    this.refreshState = 0;
 //    this.textSprite = null;
 };
 
@@ -210,19 +212,16 @@ Spriteset_Map.prototype.updateNetPlayer = function() {
         }
         else if (player.mapCreateSprite == null) {
            // if (this.IsLoaded){
-                player.mapCreateSprite = new Sprite_Character(player);
-                var nametext = new Sprite(new Bitmap(128, 16));
-                nametext.anchor.x = 0.5;
-                nametext.anchor.y = 4;
-                nametext.bitmap.outlineWidth = 3;
-                nametext.bitmap.fontSize = 12;
-                nametext.bitmap.drawText(player.netName, 0, 0, 128 , 16, 'center');
-                player.mapCreateSprite.addChild(nametext);
-                this._tilemap.addChild(player.mapCreateSprite);
-                console.log("addChild");
-                player.isCreateSprite = true;
-           // }
 
+        player.mapCreateSprite = new Sprite_OtherCharacter(player);
+        player.updateState = 1;
+        this._tilemap.addChild(player.mapCreateSprite);
+        console.log("addChild");
+
+        }
+        if (player.updateState == 1 && player.mapCreateSprite) {
+           player.updateState = 0;
+           player.mapCreateSprite.drawInfo();
         }
     }
 }
@@ -242,7 +241,8 @@ Spriteset_Map.prototype.createLowerLayer = function() {
 Spriteset_Map.prototype.initialize = function() {
     Spriteset_Base.prototype.initialize.call(this);
     console.log("Spriteset_Map");
-    //this.IsLoaded = false;
+    this.nametext = null;
+    this.batInfo = null;
 };
 
 
@@ -262,14 +262,8 @@ Spriteset_Map.prototype.createCharacters = function() {
         if (player.mapCreateSprite) {
             delete player.mapCreateSprite;
         }
-        player.mapCreateSprite = new Sprite_Character(player);
-        var nametext = new Sprite(new Bitmap(128, 16));
-        nametext.anchor.x = 0.5;
-        nametext.anchor.y = 4;
-        nametext.bitmap.outlineWidth = 3;
-        nametext.bitmap.fontSize = 12;
-        nametext.bitmap.drawText(player.netName, 0, 0, 128 , 16, 'center');
-        player.mapCreateSprite.addChild(nametext);
+        player.mapCreateSprite = new Sprite_OtherCharacter(player);
+        player.updateState = 1;
         this._characterSprites.push(player.mapCreateSprite); 
     }, this);
     this._characterSprites.push(new Sprite_Character($gamePlayer));
@@ -307,6 +301,7 @@ SceneManager.update = function() {
         this.updateInputData();
         this.updateMain();
         this.tickEnd();
+        NetworkManager.update();
 };
 
 SceneManager.onSceneStart = function() {
@@ -328,4 +323,46 @@ DataManager.isThisGameFile = function(savefileId) {
     }
 };
 
-$version = "0.23"
+function Sprite_OtherCharacter() {
+    this.initialize.apply(this, arguments);
+}
+
+Sprite_OtherCharacter.prototype = Object.create(Sprite_Character.prototype);
+Sprite_OtherCharacter.prototype.constructor = Sprite_OtherCharacter;
+
+Sprite_OtherCharacter.prototype.updateOther = function() {
+    Sprite_Character.prototype.updateOther.call(this);
+    
+    
+};
+
+Sprite_OtherCharacter.prototype.drawInfo = function() {
+    var player = this._character;
+    this.nametext.bitmap.textColor = (player.PKFlag == 1)?'#ff0000':'#ffffff';
+    var bitmap = ImageManager.loadSystem('IconSet');
+    var iconIndex = 0;
+    if (player.battleState != 0) {
+        iconIndex = (player.battleState == 2)? 82:5;
+    }
+    this.nametext.bitmap.clear();
+    this.batInfo.bitmap.clear();
+    this.batInfo.bitmap.blt(bitmap, iconIndex % 16 * 32, Math.floor(iconIndex / 16) * 32, 32, 32, 0, 0);
+    this.nametext.bitmap.drawText(player.netName, 0, 0, 128 , 16, 'center');
+};
+
+Sprite_OtherCharacter.prototype.initialize = function(character) {
+    Sprite_Character.prototype.initialize.call(this,character);
+    this.batInfo = new Sprite(new Bitmap(32, 32));
+    this.nametext = new Sprite(new Bitmap(128, 16));
+    this.nametext.anchor.x = 0.5;
+    this.nametext.anchor.y = 4;
+    this.batInfo.anchor.x = 0.5;
+    this.batInfo.anchor.y = 1;
+    this.nametext.bitmap.outlineWidth = 3;
+    this.nametext.bitmap.fontSize = 12;
+    this.addChild(this.batInfo);
+    this.addChild(this.nametext);
+};
+
+$version = "0.24"
+
