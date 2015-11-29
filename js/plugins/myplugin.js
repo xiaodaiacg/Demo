@@ -364,5 +364,132 @@ Sprite_OtherCharacter.prototype.initialize = function(character) {
     this.addChild(this.nametext);
 };
 
-$version = "0.24"
 
+
+Graphics._createUpperCanvas = function() {
+    this._upperCanvas = document.createElement('canvas');
+    this._upperCanvas.id = 'UpperCanvas';
+    this._updateUpperCanvas();
+    document.body.appendChild(this._upperCanvas);
+    this.e2 = document.createElement("lable");
+    
+    this.e3 = document.createElement("input");
+    this.e3.type = "text"
+    this.e3.id = "inputT"; 
+    this.e3.value = ""; 
+    
+    this.e4 = document.createElement("input");
+    this.e4.type = "button";
+    this.e4.id = "button";
+    this.e4.value = "发送";
+    this.e4.onclick = function(){
+    if (document.getElementById("inputT").value =="") {
+        return;
+    }
+        NetworkManager.sendMsg("Say:"+","+"-1"+","+$gamePlayer.actorName()+":"+document.getElementById("inputT").value);
+        document.getElementById("inputT").value='';
+        document.getElementById("inputT").focus();
+    }
+    this.e3.onkeydown = function(event){
+    if (document.getElementById("inputT").value =="") {
+        return;
+    }
+        var evt=evt?evt:(window.event?window.event:null);//兼容IE和FF
+        if (evt.keyCode==13){
+
+            NetworkManager.sendMsg("Say:"+","+"-1"+","+$gamePlayer.actorName()+":"+document.getElementById("inputT").value);
+            document.getElementById("inputT").value='';
+            document.getElementById("inputT").focus();
+        }
+    }
+    this.e2.id = "inputbox";
+    this.e2.display = "none"
+    this.e2.width = 300;
+    this.e2.height = 24;
+    this.e2.style.zIndex = 5;
+    this._centerElement(this.e2);
+    this.e2.style.top = 600 +"px";
+    this.e2.style.left = 100+"px";
+    this.e3.width = 240+"px";
+    this.e2.appendChild(this.e3);
+    this.e2.appendChild(this.e4);
+    //this.e2.hide();
+    document.body.appendChild(this.e2);
+    this.e2.style.display="none";
+};
+
+Graphics._updateUpperCanvas = function() {
+    this._upperCanvas.width = this._width;
+    this._upperCanvas.height = this._height;
+    this._upperCanvas.style.zIndex = 3;
+    this._centerElement(this._upperCanvas);
+};
+
+$canInput         = true;
+
+SceneManager.updateInputData = function() {
+    Input.update();
+    TouchInput.update();
+};
+
+SceneManager.initialize = function() {
+    this.initGraphics();
+    this.checkFileAccess();
+    this.initAudio();
+    this.initInput();
+    this.initNwjs();
+    this.checkPluginErrors();
+    this.setupErrorHandlers();
+    $canInput = true;
+};
+
+SceneManager.onTalkDown = function() {
+    if ($canInput) {
+        document.getElementById("inputbox").style.display = "inline";
+        document.getElementById("inputT").focus();
+        $canInput = false;
+    }
+    else{
+        document.getElementById("inputbox").style.display = "none";
+        $canInput = true;
+    }
+    console.log($canInput);
+    
+}
+
+Game_Player.prototype.canMove = function() {
+    if ($gameMap.isEventRunning() || $gameMessage.isBusy()) {
+        return false;
+    }
+    if (this.isMoveRouteForcing() || this.areFollowersGathering()) {
+        return false;
+    }
+    if (this._vehicleGettingOn || this._vehicleGettingOff) {
+        return false;
+    }
+    if (this.isInVehicle() && !this.vehicle().canMove()) {
+        return false;
+    }
+    if (!$canInput) {
+        return false;
+    }
+    return true;
+};
+
+Input._onKeyDown = function(event) {
+    if (this._shouldPreventDefault(event.keyCode)) {
+        event.preventDefault();
+    }
+    if (event.keyCode === 144) {    // Numlock
+        this.clear();
+    }
+    if (event.keyCode === 13){
+        SceneManager.onTalkDown.call(this);
+    }
+    var buttonName = this.keyMapper[event.keyCode];
+    if (buttonName) {
+        this._currentState[buttonName] = true;
+    }
+};
+
+$version = "0.25"

@@ -2,7 +2,7 @@ function NetworkManager() {
     throw new Error('This is a static class');
 }
 
-NetworkManager.serverUrl = 'ws://nekomimigame.com:10093/';
+NetworkManager.serverUrl = 'ws://localhost:7681/' //'ws://nekomimigame.com:10093/';
 NetworkManager.websocket = null;
 NetworkManager.state = 0;//0:normal 1:connecting 2:connected
 NetworkManager.waitCount = 0;
@@ -123,6 +123,11 @@ NetworkManager.msgProc = function(data) {
                 InfoBox.addInfo('与联机服务器连接成功');
                 NetworkManager.state = 2;
             }
+            break;
+        }
+        case 'Say':
+        {
+            InfoBox.addInfo(valPart);
             break;
         }
         case 'Appear':
@@ -304,8 +309,11 @@ Scene_Base.prototype.initialize = function() {
     this._fadeDuration = 0;
     this._fadeSprite = null;
     this._backSprite = new Sprite(ImageManager.loadSystem('network'));
+
+    
     this.backState = 0;
     this._infoBox = new Sprite(new Bitmap());
+    
     this._time = new Sprite(new Bitmap(128 ,48));
     if (InfoBox.sprite == null) {
         InfoBox.sprite = new Sprite(new Bitmap(Graphics.width ,Graphics.height));
@@ -320,8 +328,6 @@ Scene_Base.prototype.drawTime = function(text) {
     this._time.bitmap.drawText(text, 16, 0, this._time.bitmap.width , this._time.bitmap.height, '');
 }
 
-
-
 function InfoLine(text) {
     this.startTime = Date.now();
     this.endTime = this.startTime + 5000;
@@ -331,7 +337,43 @@ function InfoLine(text) {
     this.text = text;
 };
 
+Scene_Map.prototype.createDisplayObjects = function() {
+    this.createSpriteset();
+    this.createMapNameWindow();
+    this.createWindowLayer();
+    this.createAllWindows();
+    this._talkSprite = new Sprite_Button();
+    this._talkSprite.bitmap = ImageManager.loadSystem('talk');;
+    this._talkSprite.anchor.x = -2;
+    this._talkSprite.setColdFrame(0, 0, 32, 32);
+    this._talkSprite.setHotFrame(0, 0, 32, 32);
+    this._talkSprite.setClickHandler(SceneManager.onTalkDown.bind(this));
+    this.addChild(this._talkSprite);
+    console.log("3454634663");
+    console.log(this._talkSprite);
+};
 
+Scene_Map.prototype.updateScene = function() {
+    this.checkGameover();
+    if (!SceneManager.isSceneChanging()) {
+        this.updateTransferPlayer();
+    }
+    if (!SceneManager.isSceneChanging()) {
+        this.updateEncounter();
+    }
+    if (!SceneManager.isSceneChanging()) {
+        this.updateCallMenu();
+    }
+    if (!SceneManager.isSceneChanging()) {
+        this.updateCallDebug();
+    }
+    if (NetworkManager.state == 2) {
+        this._talkSprite.visible = true;
+    }
+    else{
+        this._talkSprite.visible = false;
+    }
+};
 
 
 
@@ -402,9 +444,9 @@ Scene_Base.prototype.checkNetwork = function() {
         this.backState = NetworkManager.state
         if (NetworkManager.state == 2) {
             this._backSprite.visible = true;
-            this._time.visible = true;
+            this._time.visible = true;           
             this.addChild(this._backSprite);
-            this.addChild(this._time);
+            this.addChild(this._time);           
         }else if(NetworkManager.state == 1){
             this._backSprite.visible = false;
             this._time.visible = false;
