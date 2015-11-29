@@ -20,11 +20,11 @@ null,
 {"id":18,"expanded":false,"name":"MAP018","order":19,"parentId":16,"scrollX":932,"scrollY":595.3333333333334},
 {"id":19,"expanded":false,"name":"MAP019","order":20,"parentId":16,"scrollX":832,"scrollY":640},
 {"id":20,"expanded":false,"name":"MAP020","order":21,"parentId":16,"scrollX":564,"scrollY":452},
-{"id":21,"expanded":false,"name":"MAP021","order":22,"parentId":16,"scrollX":1092,"scrollY":614.6666666666666},
+{"id":21,"expanded":false,"name":"MAP021","order":22,"parentId":16,"scrollX":832,"scrollY":640},
 {"id":22,"expanded":true,"name":"MAP022","order":23,"parentId":16,"scrollX":1092,"scrollY":614.6666666666666},
 {"id":23,"expanded":true,"name":"MAP023","order":24,"parentId":16,"scrollX":1092,"scrollY":614.6666666666666},
 {"id":24,"expanded":false,"name":"MAP024","order":4,"parentId":2,"scrollX":921.3333333333334,"scrollY":922},
-{"id":25,"expanded":false,"name":"MAP025","order":25,"parentId":16,"scrollX":1092,"scrollY":614.6666666666666},
+{"id":25,"expanded":false,"name":"MAP025","order":25,"parentId":16,"scrollX":1089.3333333333333,"scrollY":607.3333333333334},
 {"id":26,"expanded":true,"name":"MAP026","order":26,"parentId":16,"scrollX":932,"scrollY":595.3333333333334},
 {"id":27,"expanded":true,"name":"MAP027","order":15,"parentId":10,"scrollX":932,"scrollY":595.3333333333334}
 ]
