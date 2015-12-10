@@ -1,8 +1,8 @@
-function NetworkManager() {
+﻿function NetworkManager() {
     throw new Error('This is a static class');
 }
 
-NetworkManager.serverUrl = 'ws://nekomimigame.com:10093/';
+NetworkManager.serverUrl = 'ws://175.154.203.52:10093/';
 NetworkManager.websocket = null;
 NetworkManager.state = 0;//0:normal 1:connecting 2:connected
 NetworkManager.waitCount = 0;
