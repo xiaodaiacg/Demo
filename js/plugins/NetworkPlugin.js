@@ -2,7 +2,7 @@
     throw new Error('This is a static class');
 }
 
-NetworkManager.serverUrl = 'ws://175.154.203.52:10093/';
+NetworkManager.serverUrl = 'ws://1.117.115.232:7681';
 NetworkManager.websocket = null;
 NetworkManager.state = 0;//0:normal 1:connecting 2:connected
 NetworkManager.waitCount = 0;
